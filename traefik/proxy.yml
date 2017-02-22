@@ -1,0 +1,42 @@
+version: "3"
+ 
+services:
+  traefik:
+    image: traefik
+    command: --consul --consul.endpoint=consul:8500 
+    networks:
+      - proxy
+      - consul
+    ports:
+      - 80:80
+      - 443:443
+      - 8080:8080
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - traefikdata:/etc/traefik/
+    deploy:
+      replicas: 3
+      placement:
+        constraints: [node.role == manager]
+      update_config:
+        parallelism: 1
+        delay: 45s
+        monitor: 15s
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 10
+        window: 60s
+
+volumes:
+  traefikdata:
+    driver: local-persist
+    driver_opts:
+      mountpoint: /mnt/glusterfs/docker/proxy/
+
+networks:
+  proxy:
+    external: true
+  consul:
+    external:
+      name: consul_default

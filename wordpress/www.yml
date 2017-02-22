@@ -1,0 +1,81 @@
+version: '3'
+
+services:
+
+  wordpress:
+      image: wordpress
+      environment:
+        - WORDPRESS_DB_USER=wordpress
+        - WORDPRESS_DB_PASSWORD=${DBPWD}
+        - WORDPRESS_DB_HOST=mariadb
+      volumes:
+        - html:/var/www/html
+      deploy:
+        labels:
+          - "traefik.port=80"
+          - "traefik.docker.network=proxy"
+          - "traefik.frontend.rule=Host:${WWWDOMAIN}"
+          - "traefik.backend=wordpress"
+          - "traefik.frontend.entryPoints=http,https"
+        replicas: 3
+        update_config:
+          parallelism: 1
+          delay: 30s
+          monitor: 10s
+        restart_policy:
+          condition: on-failure
+          delay: 5s
+          max_attempts: 10
+          window: 60s
+      healthcheck:
+        test: ["CMD", "curl", "-f", "http://localhost"]
+        interval: 20s
+        timeout: 10s
+        retries: 3
+      networks:
+        proxy:
+          aliases:
+            - wordpress
+        default:
+      depends_on: 
+        - mariadb
+        
+  mariadb:
+      image: mariadb
+      environment:
+        - MYSQL_ROOT_PASSWORD=${DBROOTPWD}
+        - MYSQL_DATABASE=wordpress
+        - MYSQL_USER=wordpress
+        - MYSQL_PASSWORD=${DBPWD}
+      volumes:
+        - mysql:/var/lib/mysql
+      deploy:
+        replicas: 1
+
+  dns:
+    image: berndinox/cloudflare-ddns:latest
+    environment:
+      - CF_HOST=${WWWDOMAIN}
+      - CF_API_KEY=${CFKEY}
+      - CF_API_EMAIL=&{CFMAIL}
+    deploy:
+      replicas: 1
+    depends_on:
+      - wordpress
+
+networks:
+  default:
+    driver: overlay
+  proxy:
+    external:
+       name: proxy
+
+volumes:
+  mysql:
+    driver: local-persist
+    driver_opts:
+      mountpoint: /mnt/glusterfs/docker/www/mysql
+  html:
+    driver: local-persist
+    driver_opts:
+      mountpoint: /mnt/glusterfs/docker/www/html

@@ -1,0 +1,51 @@
+version: '3'
+
+services:
+  s3:
+    image: minio/minio
+    volumes:
+      - miniodata:/export
+    networks:
+      proxy:
+        aliases:
+          - minio
+    environment:
+      - MINIO_ACCESS_KEY=${USER}
+      - MINIO_SECRET_KEY=${S3PWD}
+    deploy:
+      replicas: 3
+      restart_policy:
+        delay: 10s
+        max_attempts: 10
+        window: 60s
+      labels:
+        - "traefik.port=9000"
+        - "traefik.docker.network=proxy"
+        - "traefik.frontend.rule=Host:${S3DOMAIN}"
+        - "traefik.backend=minio"
+        - "traefik.frontend.entryPoints=http,https"
+    command: server /export
+
+  dns:
+    image: berndinox/cloudflare-ddns:latest
+    environment:
+      - CF_HOST=${S3DOMAIN}
+      - CF_API_KEY=${CFKEY}
+      - CF_API_EMAIL=&{CFMAIL}
+    deploy:
+      replicas: 1
+    depends_on:
+
+volumes:
+  miniodata:
+    driver: local-persist
+    driver_opts:
+      mountpoint: /mnt/glusterfs/docker/cloud/data/bernd/files
+
+networks:
+  default:
+    driver: overlay
+  proxy:
+    external:
+      name: proxy
+

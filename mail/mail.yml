@@ -1,0 +1,75 @@
+version: '3'
+
+services:
+  allinone:
+    image: tvial/docker-mailserver:latest
+    ports:
+      - "25:25"
+      - "143:143"
+      - "587:587"
+      - "993:993"
+    volumes:
+      - maildata:/var/mail
+      - mailstate:/var/mail-state
+      - config:/tmp/docker-mailserver
+      - ssl:/etc/letsencrypt
+    environment:
+      - ENABLE_SPAMASSASSIN=1
+      - ENABLE_CLAMAV=0
+      - ONE_DIR=1
+      - ENABLE_FETCHMAIL=0
+      - OVERRIDE_HOSTNAME=${MAILDOMAIN}
+      - POSTMASTER_ADDRESS=${POSTMASTER}
+      - SSL_TYPE=letsencrypt
+      - DMS_DEBUG=0
+    deploy:
+      replicas: 1
+      update_config:
+        parallelism: 1
+        delay: 30s
+        monitor: 10s
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 10
+        window: 60s
+    healthcheck:
+      test: ["CMD", "curl", "-f", "localhost:143"]
+      interval: 20s
+      timeout: 10s
+      retries: 3
+
+  dns:
+    image: berndinox/cloudflare-ddns:latest
+    environment:
+      - CF_HOST=${MAILDOMAIN}
+      - CF_API_KEY=${CFKEY}
+      - CF_API_EMAIL=&{CFMAIL}
+    deploy:
+      replicas: 1
+    depends_on:
+      - allinone
+
+
+networks:
+  default:
+    driver: overlay
+    
+volumes:
+  maildata:
+    driver: local-persist
+    driver_opts:
+      mountpoint: /mnt/glusterfs/docker/mail/data/
+  mailstate:
+    driver: local-persist
+    driver_opts:
+      mountpoint: /mnt/glusterfs/docker/mail/state/
+  config:
+    driver: local-persist
+    driver_opts:
+      mountpoint: /mnt/glusterfs/docker/mail/config/
+  ssl:
+    driver: local-persist
+    driver_opts:
+      mountpoint: /mnt/glusterfs/docker/mail/ssl/
+

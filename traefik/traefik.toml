@@ -1,0 +1,34 @@
+logLevel = "WARN"
+defaultEntryPoints = ["http", "https"]
+
+[entryPoints]
+ [entryPoints.http]
+ address = ":80"
+ compress = false
+   [entryPoints.http.redirect]
+      entryPoint = "https"
+  [entryPoints.https]
+  address = ":443"
+    [entryPoints.https.tls]
+
+[acme]
+email = "admin@berndklaus.at"
+storage = "traefik/acme/account"
+entryPoint = "https"
+onHostRule = true
+onDemand = true
+
+[[acme.domains]]
+ main = "${ZONE1}"
+
+[[acme.domains]]
+ main = "${ZONE2}"
+
+[web]
+address = ":8080"
+
+[docker]
+domain = "docker.localhost"
+watch = true
+swarmmode = true
+

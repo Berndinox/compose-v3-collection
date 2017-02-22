@@ -1,0 +1,97 @@
+version: '3'
+
+services:
+
+  cadvisor:
+    image: google/cadvisor:v0.24.1
+    deploy:
+      mode: global
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:rw
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+
+  node-exporter:
+    image: basi/node-exporter
+    deploy:
+      mode: global
+    volumes:
+      - /proc:/host/proc
+      - /sys:/host/sys
+      - /:/rootfs
+      - /etc/hostname:/etc/host_hostname
+    environment:
+      - HOST_HOSTNAME=/etc/host_hostname
+    command: -collector.procfs /host/proc -collector.sysfs /host/sys -collector.filesystem.ignored-mount-points "^/(sys|proc|dev|host|etc)($$|/)"  --collector.textfile.directory /etc/node-exporter/ --collectors.enabled="conntrack,diskstats,entropy,filefd,filesystem,loadavg,mdadm,meminfo,netdev,netstat,stat,textfile,time,vmstat,ipvs"
+
+  alertmanager:
+    image: prom/alertmanager
+    deploy:
+      replicas: 1
+    command: -config.file=/etc/alertmanager/config.yml
+
+  prometheus:
+    image: basi/prometheus-swarm
+    deploy:
+      replicas: 1
+    volumes:
+      - promconfig:/etc/prometheus
+      - promdata:/prometheus
+    command: -config.file=/etc/prometheus/prometheus.yml -storage.local.path=/prometheus -web.console.libraries=/etc/prometheus/console_libraries -web.console.templates=/etc/prometheus/consoles -alertmanager.url=http://alertmanager:9093 -storage.local.memory-chunks=100000 -storage.local.retention=2h
+
+  grafana:
+    image: basi/grafana
+    deploy:
+      replicas: 1
+      labels:
+        - "traefik.port=3000"
+        - "traefik.docker.network=proxy"
+        - "traefik.frontend.rule=Host:${GRAFANADOMAIN}"
+        - "traefik.backend=grafana"
+        - "traefik.frontend.entryPoints=http,https"
+    volumes:
+      - grafanadata:/var/lib/grafana
+    environment:
+      - "GF_SERVER_ROOT_URL=http://grafana.${CLUSTER_DOMAIN}"
+      - "GF_SECURITY_ADMIN_PASSWORD=${PASSWORD}"
+      - "GF_USERS_ALLOW_SIGN_UP=false"
+      - "PROMETHEUS_ENDPOINT=http://prometheus:9090"
+    networks:
+      proxy:
+        aliases:
+          - grafana
+      default:
+
+  dns:
+      image: berndinox/cloudflare-ddns:latest
+      environment:
+      - CF_HOST=${GRAFANADOMAIN}
+      - CF_API_KEY=${CFKEY}
+      - CF_API_EMAIL=&{CFMAIL}
+      deploy:
+        replicas: 1
+      depends_on:
+        - grafana
+
+  
+networks:
+  default:
+    driver: overlay
+  proxy:
+    external:
+       name: proxy
+
+volumes:
+  promconfig:
+    driver: local-persist
+    driver_opts:
+      mountpoint: /mnt/glusterfs/docker/metrics/promconfig
+  promdata:
+    driver: local-persist
+    driver_opts:
+      mountpoint: /mnt/glusterfs/docker/metrics/promdata
+  grafanadata:
+    driver: local-persist
+    driver_opts:
+      mountpoint: /mnt/glusterfs/docker/metrics/grafanadata

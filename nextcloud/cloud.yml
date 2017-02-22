@@ -1,0 +1,107 @@
+version: '3'
+
+services:
+
+  mysql:
+    image: mariadb
+    environment:
+      - MYSQL_ROOT_PASSWORD=${SQLROOTPWD}
+      - MYSQL_DATABASE=nextcloud
+      - MYSQL_PASSWORD=${SQLPWD}
+      - MYSQL_USER=nextcloud
+    volumes:
+      - mysql:/var/lib/mysql
+    deploy:
+      replicas: 1
+
+  redis:
+    image: redis
+    volumes:
+      - redis:/data
+    deploy:
+      replicas: 1
+
+  nextcloud:
+    #image: wonderfall/nextcloud:latest
+    image: berndinox/nextcloud
+    environment:
+      - DB_NAME=nextcloud
+      - DB_PASSWORD=${SQLPWD}
+      - DB_USER=nextcloud
+      - DB_HOST=mysql
+      - DB_TYPE=mysql
+      - ADMIN_USER=bernd
+      - ADMIN_PASSWORD=${PASSWORD}
+      - TRUSTED_DOMAIN1=${CLOUDDOMAIN}
+      - EXTERNAL_DOMAIN=${CLOUDDOMAIN}
+    volumes:
+      - config:/config
+      - data:/data
+      - apps:/apps2
+    deploy:
+      replicas: 1
+      labels:
+        - "traefik.port=8888"
+        - "traefik.docker.network=proxy"
+        - "traefik.frontend.rule=Host:${CLOUDDOMAIN}t"
+        - "traefik.backend=nextcloud"
+        - "traefik.frontend.entryPoints=http,https"
+      update_config:
+        parallelism: 1
+        delay: 30s
+        monitor: 10s
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 10
+        window: 60s
+    networks:
+      proxy:
+        aliases:
+          - nextcloud
+      default:
+    depends_on:
+      - mysql
+      - redis
+    
+  dns:
+    image: berndinox/cloudflare-ddns:latest
+    environment:
+      - CF_HOST=${CLOUDDOMAIN}
+      - CF_API_KEY=${CFKEY}
+      - CF_API_EMAIL=&{CFMAIL}
+    deploy:
+      replicas: 1
+    depends_on:
+      - nextcloud
+
+
+networks:
+  default:
+    driver: overlay
+  proxy:
+    external:
+      name: proxy
+
+volumes:
+  mysql:
+    driver: local-persist
+    driver_opts:
+      mountpoint: /mnt/glusterfs/docker/cloud/mysql
+  data:
+    driver: local-persist
+    driver_opts:
+      mountpoint: /mnt/glusterfs/docker/cloud/data
+  config:
+    driver: local-persist
+    driver_opts:
+      mountpoint: /mnt/glusterfs/docker/cloud/config
+  apps:
+    driver: local-persist
+    driver_opts:
+      mountpoint: /mnt/glusterfs/docker/cloud/apps
+  redis:
+    driver: local-persist
+    driver_opts:
+      mountpoint: /mnt/glusterfs/docker/cloud/redis
+
