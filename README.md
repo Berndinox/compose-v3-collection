@@ -1,7 +1,5 @@
-### outdated
-### for testing only
-### no warranty
----------------------------
-
 # compose-v3-collection
-https://berndklaus.at/posts/docker-compose-v3-real-world
+For learning purpose this repository provides some basic examples. Although these are already older examples, however they still apply.
+
+
+More Infos: https://berndklaus.at/posts/docker-compose-v3-real-world
